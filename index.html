@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ceylon Mission of Seventh-day Adventists Membership Directory</title>
+  <style>
+    :root{
+      /* Denim palette from logo */
+      --primary:#1d3557;     /* deep denim */
+      --accent:#457b9d;      /* lighter denim */
+      --bg:#f6f8fb;
+      --card:#ffffff;
+      --text:#1f2937;
+      --muted:#6b7280;
+      --ok:#22c55e;
+      --danger:#ef4444;
+      --border:#e5e7eb;
+      --field:#f3f4f6;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial;background:var(--bg);color:var(--text)}
+    header{
+      background:#fff;border-bottom:3px solid var(--primary);
+      position:sticky;top:0;z-index:10
+    }
+    .header-inner{
+      max-width:1200px;margin:0 auto;padding:14px 20px;
+      display:flex;align-items:center;justify-content:space-between;gap:12px
+    }
+    header img{height:48px}
+    .brand{font-weight:800;color:var(--primary);letter-spacing:.2px}
+    .wrap{max-width:1200px;margin:0 auto;padding:20px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .right{margin-left:auto}
+    .btn{border:none;border-radius:10px;padding:9px 12px;background:#e5e7eb;color:#111827;cursor:pointer}
+    .btn.primary{background:var(--primary);color:#fff}
+    .btn.accent{background:var(--accent);color:#fff}
+    .btn.ok{background:var(--ok);color:#fff}
+    .btn.danger{background:var(--danger);color:#fff}
+    .btn:active{transform:translateY(1px)}
+    input,select,textarea{
+      background:var(--field);border:1px solid #d1d5db;border-radius:10px;padding:8px 10px;color:var(--text)
+    }
+    input[type=date]{padding:6px 10px}
+    label{display:block;font-size:.92rem;color:#111827;margin:6px 0}
+    .muted{color:var(--muted)}
+    .hidden{display:none!important}
+    .pill{font-size:.8rem;background:#e5e7eb;border-radius:999px;padding:2px 8px}
+    .member{border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin:8px 0;background:#fff}
+    .member .name{font-weight:700}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:10px}
+    .col-6{grid-column:span 6}
+    .col-12{grid-column:span 12}
+    @media (max-width:720px){.col-6{grid-column:span 12}}
+    dialog{border:none;border-radius:16px;max-width:680px;width:92%}
+    dialog::backdrop{background:rgba(0,0,0,.5)}
+    table{width:100%;border-collapse:separate;border-spacing:0 8px}
+    th,td{text-align:left;padding:10px}
+    th{color:var(--primary);font-weight:700}
+    tr{background:#fff;border:1px solid #e5e7eb;border-radius:10px}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="row" style="align-items:center">
+        <img src="adventist-symbol--denim.png" alt="Adventist Logo" />
+        <div class="brand">Ceylon Mission of Seventh-day Adventists Membership Directory</div>
+      </div>
+      <div class="row">
+        <span class="muted" id="whoami"></span>
+        <button class="btn" id="btnLogout">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- LOGIN -->
+  <section class="wrap" id="loginSection">
+    <div class="card">
+      <h2>Login</h2>
+      <div class="toolbar">
+        <label>Church / Role
+          <select id="loginChurch" style="min-width:220px"></select>
+        </label>
+        <label>Password
+          <input id="loginPassword" type="password" placeholder="Enter password" />
+        </label>
+        <button class="btn primary" id="btnLogin">Login</button>
+        <span id="loginError" class="muted"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- CHURCH VIEW -->
+  <section class="wrap hidden" id="churchSection">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2 id="churchTitle">Church Directory</h2>
+        <div class="toolbar">
+          <button class="btn" id="btnExportJSON">Export JSON</button>
+          <button class="btn" id="btnExportCSV">Export Spreadsheet</button>
+          <button class="btn primary" id="btnAdd">Add Member</button>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <label>Sort by
+          <select id="sortSelect">
+            <option value="name">Name</option>
+            <option value="family">Family</option>
+            <option value="baptism">Date of Baptism</option>
+            <option value="birthday">Birthday</option>
+            <option value="age">Age</option>
+          </select>
+        </label>
+        <input class="right" style="flex:1" type="text" id="searchInput" placeholder="Search by Name / Family / NIC" />
+        <span class="pill" id="countPill">0 members</span>
+      </div>
+
+      <div id="memberContainer"></div>
+    </div>
+  </section>
+
+  <!-- ADMIN VIEW -->
+  <section class="wrap hidden" id="adminSection">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2>Admin Dashboard</h2>
+        <div class="toolbar">
+          <button class="btn" id="btnExportAllJSON">Export All JSON</button>
+          <button class="btn" id="btnExportAllCSV">Export All Spreadsheet</button>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <input style="flex:1" type="text" id="adminSearch" placeholder="Search all members (Name / NIC / Church)" />
+        <label>Sort by
+          <select id="adminSort">
+            <option value="name">Name</option>
+            <option value="church">Church</option>
+            <option value="birthday">Birthday</option>
+            <option value="age">Age</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="adminMemberContainer"></div>
+    </div>
+
+    <div class="card">
+      <h3>Church Management</h3>
+      <table>
+        <thead>
+          <tr><th style="width:32%">Church</th><th style="width:32%">Password</th><th>Actions</th></tr>
+        </thead>
+        <tbody id="churchTableBody"></tbody>
+      </table>
+
+      <hr style="border:0;border-top:1px solid var(--border);margin:14px 0">
+      <div class="toolbar">
+        <input id="newChurchName" placeholder="New church name" />
+        <input id="newChurchPwd" placeholder="Password" />
+        <button class="btn ok" id="btnAddChurch">Add Church</button>
+      </div>
+
+      <h4 style="margin-top:18px">Admin Password</h4>
+      <div class="toolbar">
+        <input id="adminPwdInput" type="password" placeholder="New admin password" />
+        <button class="btn accent" id="btnChangeAdminPwd">Change Admin Password</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- MEMBER MODAL -->
+  <dialog id="memberModal">
+    <form method="dialog">
+      <h3 id="modalTitle">Add Member</h3>
+      <div class="grid">
+        <label class="col-12">Full Name<input id="f_name" type="text" required /></label>
+        <label class="col-6">Family<input id="f_family" type="text" /></label>
+        <label class="col-6">NIC / Passport<input id="f_nic" type="text" /></label>
+        <label class="col-6">Phone<input id="f_phone" type="tel" /></label>
+        <label class="col-6">Email<input id="f_email" type="email" /></label>
+        <label class="col-12">Address<input id="f_address" type="text" /></label>
+        <label class="col-6">Birthday<input id="f_birthday" type="date" /></label>
+        <label class="col-6">Date of Baptism<input id="f_baptism" type="date" /></label>
+        <label class="col-6">Gender
+          <select id="f_gender">
+            <option>Male</option>
+            <option>Female</option>
+          </select>
+        </label>
+        <label class="col-6">Ministries (comma-separated)<input id="f_ministries" type="text" /></label>
+        <label class="col-12">Photo URL<input id="f_photo" type="text" /></label>
+        <label class="col-12">Notes<textarea id="f_notes"></textarea></label>
+      </div>
+      <div class="row" style="justify-content:flex-end;margin-top:8px">
+        <button type="button" class="btn" id="cancelMember">Cancel</button>
+        <button class="btn primary" id="saveMember">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+  <script>
+    // ===== Your Firebase config =====
+    const firebaseConfig = {
+      apiKey: "AIzaSyBAV976L8pcasN6J7Dbyqv6ZiY7wi2-Bc8",
+      authDomain: "cms-membership-directory.firebaseapp.com",
+      projectId: "cms-membership-directory",
+      storageBucket: "cms-membership-directory.firebasestorage.app",
+      messagingSenderId: "84433481517",
+      appId: "1:84433481517:web:1e909f61646ea110882da4"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // ===== Constants & helpers =====
+    const COL_CHURCHES = 'churches';
+    const COL_MEMBERS  = 'members';
+    const COL_META     = 'meta';
+    const DOC_ADMIN    = 'admin';
+
+    const el = id => document.getElementById(id);
+    const fmtDate = v => !v ? '' : new Date(v).toISOString().slice(0,10);
+    const calcAge = dobStr => {
+      if(!dobStr) return '';
+      const dob = new Date(dobStr); const t = new Date();
+      let a = t.getFullYear()-dob.getFullYear();
+      const m = t.getMonth()-dob.getMonth();
+      if(m<0 || (m===0 && t.getDate()<dob.getDate())) a--;
+      return isFinite(a)? a : '';
+    };
+
+    let currentChurch = null; // {id,name,password}
+    let isAdmin = false;
+
+    function setView(view){
+      el('loginSection').classList.toggle('hidden', view!=='login');
+      el('churchSection').classList.toggle('hidden', view!=='church');
+      el('adminSection').classList.toggle('hidden', view!=='admin');
+    }
+    function setWhoAmI(){
+      el('whoami').textContent = isAdmin ? 'Signed in as Admin'
+        : (currentChurch ? `Signed in: ${currentChurch.name}` : '');
+    }
+
+    // ===== Seed admin password on first run =====
+    async function ensureAdminSeed(){
+      const ref = db.collection(COL_META).doc(DOC_ADMIN);
+      const snap = await ref.get();
+      if(!snap.exists){
+        await ref.set({ adminPwd: 'admin777', seededAt: new Date().toISOString() });
+        console.log('Seeded admin password: admin777 (change it in Admin)');
+      }
+    }
+
+    // ===== Login dropdown =====
+    async function loadChurchOptions(){
+      const sel = el('loginChurch');
+      sel.innerHTML = '';
+      sel.add(new Option('Select…','',{selected:true,disabled:true}));
+      sel.add(new Option('Admin','__ADMIN__'));
+      const qs = await db.collection(COL_CHURCHES).orderBy('name').get();
+      qs.forEach(d => sel.add(new Option(d.data().name, d.id)));
+    }
+
+    // ===== Login handler =====
+    async function handleLogin(){
+      const choice = el('loginChurch').value;
+      const pwd = el('loginPassword').value.trim();
+      const err = el('loginError');
+      err.textContent = '';
+
+      if(!choice){ err.textContent='Please select Admin or a Church.'; return; }
+      if(!pwd){ err.textContent='Please enter the password.'; return; }
+
+      if(choice==='__ADMIN__'){
+        const doc = await db.collection(COL_META).doc(DOC_ADMIN).get();
+        const real = doc.exists ? doc.data().adminPwd : null;
+        if(pwd !== real){ err.textContent='Invalid admin password.'; return; }
+        isAdmin = true; currentChurch = null;
+        setView('admin'); setWhoAmI();
+        renderAdmin();
+      } else {
+        const d = await db.collection(COL_CHURCHES).doc(choice).get();
+        if(!d.exists){ err.textContent='Church not found.'; return; }
+        const ch = { id:d.id, ...d.data() };
+        if(pwd !== ch.password){ err.textContent='Incorrect church password.'; return; }
+        isAdmin = false; currentChurch = ch;
+        el('churchTitle').textContent = `${ch.name} – Directory`;
+        setView('church'); setWhoAmI();
+        renderMembers();
+      }
+      el('loginPassword').value = '';
+    }
+
+    // ===== Church members view =====
+    function memberCard(m, id){
+      const div = document.createElement('div');
+      div.className = 'member';
+      const age = calcAge(m.birthday);
+      div.innerHTML = `
+        <div class="row" style="justify-content:space-between">
+          <div>
+            <div class="name">${m.name||''}</div>
+            <div class="muted">${m.family||''}</div>
+            <div class="muted">${m.nic||''}</div>
+          </div>
+          <div class="row">
+            <button class="btn" data-edit="${id}">Edit</button>
+            <button class="btn danger" data-del="${id}">Delete</button>
+          </div>
+        </div>
+        <div class="row" style="margin-top:6px;flex-wrap:wrap">
+          ${m.phone? `<span class="pill">📞 ${m.phone}</span>`:''}
+          ${m.email? `<span class="pill">✉️ ${m.email}</span>`:''}
+          ${m.address? `<span class="pill">🏠 ${m.address}</span>`:''}
+          ${m.gender? `<span class="pill">⚥ ${m.gender}</span>`:''}
+          ${m.birthday? `<span class="pill">🎂 ${fmtDate(m.birthday)}${age!==''?` • ${age}`:''}</span>`:''}
+          ${m.baptism? `<span class="pill">✝ ${fmtDate(m.baptism)}</span>`:''}
+          ${(m.ministries&&m.ministries.length)? `<span class="pill">🎖 ${m.ministries.join(', ')}</span>`:''}
+        </div>
+        ${m.notes? `<div class="muted" style="margin-top:6px">${m.notes}</div>`:''}
+      `;
+      return div;
+    }
+
+    async function getMembers(){
+      const qs = await db.collection(COL_CHURCHES).doc(currentChurch.id)
+        .collection(COL_MEMBERS).get();
+      const out = [];
+      qs.forEach(doc => out.push({ id:doc.id, ...doc.data() }));
+      return out;
+    }
+
+    async function renderMembers(){
+      const cont = el('memberContainer');
+      cont.innerHTML = '';
+      const sort = el('sortSelect').value;
+      const q = (el('searchInput').value||'').toLowerCase();
+
+      let arr = await getMembers();
+      // filter
+      arr = arr.filter(m => [m.name,m.family,m.nic].map(x=>(x||'').toLowerCase()).join(' ').includes(q));
+      // sort
+      arr.sort((a,b)=>{
+        if(sort==='name') return (a.name||'').localeCompare(b.name||'');
+        if(sort==='family') return (a.family||'').localeCompare(b.family||'');
+        if(sort==='birthday') return (a.birthday||'').localeCompare(b.birthday||'');
+        if(sort==='baptism') return (a.baptism||'').localeCompare(b.baptism||'');
+        if(sort==='age') return (calcAge(a.birthday)||0)-(calcAge(b.birthday)||0);
+        return 0;
+      });
+
+      el('countPill').textContent = `${arr.length} member${arr.length===1?'':'s'}`;
+      arr.forEach(m => cont.appendChild(memberCard(m, m.id)));
+
+      // bind edit/delete
+      cont.querySelectorAll('[data-edit]').forEach(btn=>{
+        btn.onclick = ()=> openMemberModal(btn.getAttribute('data-edit'));
+      });
+      cont.querySelectorAll('[data-del]').forEach(btn=>{
+        btn.onclick = async ()=>{
+          if(!confirm('Delete this member?')) return;
+          await db.collection(COL_CHURCHES).doc(currentChurch.id).collection(COL_MEMBERS)
+            .doc(btn.getAttribute('data-del')).delete();
+          renderMembers();
+        };
+      });
+    }
+
+    // search/sort handlers
+    el('searchInput').oninput = ()=> renderMembers();
+    el('sortSelect').onchange = ()=> renderMembers();
+    el('btnAdd').onclick = ()=> openMemberModal();
+
+    // ===== Member modal =====
+    function fillMemberForm(m){
+      el('f_name').value = m?.name||'';
+      el('f_family').value = m?.family||'';
+      el('f_nic').value = m?.nic||'';
+      el('f_phone').value = m?.phone||'';
+      el('f_email').value = m?.email||'';
+      el('f_address').value = m?.address||'';
+      el('f_birthday').value = m?.birthday? fmtDate(m.birthday):'';
+      el('f_baptism').value = m?.baptism? fmtDate(m.baptism):'';
+      el('f_gender').value = m?.gender||'Male';
+      el('f_ministries').value = (m?.ministries||[]).join(', ');
+      el('f_photo').value = m?.photo||'';
+      el('f_notes').value = m?.notes||'';
+    }
+    function collectMemberForm(){
+      return {
+        name: el('f_name').value.trim(),
+        family: el('f_family').value.trim(),
+        nic: el('f_nic').value.trim(),
+        phone: el('f_phone').value.trim(),
+        email: el('f_email').value.trim(),
+        address: el('f_address').value.trim(),
+        birthday: el('f_birthday').value || '',
+        baptism: el('f_baptism').value || '',
+        gender: el('f_gender').value,
+        ministries: el('f_ministries').value? el('f_ministries').value.split(',').map(s=>s.trim()).filter(Boolean) : [],
+        photo: el('f_photo').value.trim(),
+        notes: el('f_notes').value.trim(),
+        updatedAt: new Date().toISOString()
+      };
+    }
+    async function loadMember(id){
+      const d = await db.collection(COL_CHURCHES).doc(currentChurch.id).collection(COL_MEMBERS).doc(id).get();
+      return d.exists ? { id: d.id, ...d.data() } : null;
+    }
+    function openMemberModal(id){
+      const dlg = el('memberModal');
+      const editing = !!id;
+      el('modalTitle').textContent = editing ? 'Edit Member' : 'Add Member';
+      fillMemberForm({});
+      dlg.showModal();
+
+      if(editing){ loadMember(id).then(m => fillMemberForm(m||{})); }
+
+      el('cancelMember').onclick = ()=> dlg.close();
+      el('saveMember').onclick = async (e)=>{
+        e.preventDefault();
+        const obj = collectMemberForm();
+        if(!obj.name){ alert('Name is required'); return; }
+        const col = db.collection(COL_CHURCHES).doc(currentChurch.id).collection(COL_MEMBERS);
+        if(editing){
+          await col.doc(id).set(obj, {merge:true});
+        } else {
+          obj.createdAt = new Date().toISOString();
+          await col.add(obj);
+        }
+        dlg.close(); renderMembers();
+      };
+    }
+
+    // ===== Admin view =====
+    async function listAllMembers(){
+      // build map of churchId -> churchName
+      const map = {};
+      const chSnap = await db.collection(COL_CHURCHES).get();
+      chSnap.forEach(d => map[d.id] = d.data().name);
+
+      const qs = await db.collectionGroup(COL_MEMBERS).get();
+      const out = [];
+      qs.forEach(doc=>{
+        const churchId = doc.ref.parent.parent.id;
+        out.push({ id:doc.id, churchId, churchName: map[churchId]||'', ...doc.data() });
+      });
+      return out;
+    }
+
+    async function renderAdmin(){
+      await renderAdminMembers();
+      await renderChurchTable();
+    }
+
+    async function renderAdminMembers(){
+      const cont = el('adminMemberContainer');
+      cont.innerHTML = '';
+      const q = (el('adminSearch').value||'').toLowerCase();
+      const sort = el('adminSort').value;
+
+      let arr = await listAllMembers();
+      arr = arr.filter(m => [m.name,m.family,m.nic,m.churchName]
+        .map(x=>(x||'').toLowerCase()).join(' ').includes(q));
+
+      arr.sort((a,b)=>{
+        if(sort==='name') return (a.name||'').localeCompare(b.name||'');
+        if(sort==='church') return (a.churchName||'').localeCompare(b.churchName||'');
+        if(sort==='birthday') return (a.birthday||'').localeCompare(b.birthday||'');
+        if(sort==='age') return (calcAge(a.birthday)||0)-(calcAge(b.birthday)||0);
+        return 0;
+      });
+
+      arr.forEach(m=>{
+        const d = document.createElement('div');
+        d.className = 'member';
+        d.innerHTML = `
+          <div class="row" style="justify-content:space-between">
+            <div>
+              <div class="name">${m.name||''}</div>
+              <div class="muted">${m.family||''}</div>
+            </div>
+            <div class="muted">${m.churchName||''}</div>
+          </div>
+        `;
+        cont.appendChild(d);
+      });
+    }
+    el('adminSearch').oninput = ()=> renderAdminMembers();
+    el('adminSort').onchange = ()=> renderAdminMembers();
+
+    async function renderChurchTable(){
+      const tbody = el('churchTableBody');
+      tbody.innerHTML = '';
+      const qs = await db.collection(COL_CHURCHES).orderBy('name').get();
+      qs.forEach(doc=>{
+        const ch = { id:doc.id, ...doc.data() };
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><input data-ch-name="${ch.id}" value="${ch.name}"/></td>
+          <td><input data-ch-pwd="${ch.id}" value="${ch.password}"/></td>
+          <td>
+            <button class="btn" data-ch-save="${ch.id}">Save</button>
+            <button class="btn danger" data-ch-del="${ch.id}">Delete</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // save handlers
+      tbody.querySelectorAll('[data-ch-save]').forEach(btn=>{
+        btn.onclick = async ()=>{
+          const id = btn.getAttribute('data-ch-save');
+          const name = tbody.querySelector(`[data-ch-name="${id}"]`).value.trim();
+          const pwd  = tbody.querySelector(`[data-ch-pwd="${id}"]`).value.trim();
+          if(!name || !pwd){ alert('Name and password required'); return; }
+          await db.collection(COL_CHURCHES).doc(id).set({name, password:pwd}, {merge:true});
+          await loadChurchOptions();
+          await renderChurchTable();
+        };
+      });
+      // delete handlers
+      tbody.querySelectorAll('[data-ch-del]').forEach(btn=>{
+        btn.onclick = async ()=>{
+          if(!confirm('Delete this church and all its members?')) return;
+          const id = btn.getAttribute('data-ch-del');
+          // delete members in batches
+          const memSnap = await db.collection(COL_CHURCHES).doc(id).collection(COL_MEMBERS).get();
+          const batch = db.batch();
+          memSnap.forEach(d => batch.delete(d.ref));
+          await batch.commit();
+          await db.collection(COL_CHURCHES).doc(id).delete();
+          await loadChurchOptions();
+          await renderChurchTable();
+        };
+      });
+    }
+
+    // Add church
+    el('btnAddChurch').onclick = async ()=>{
+      const name = el('newChurchName').value.trim();
+      const pwd  = el('newChurchPwd').value.trim();
+      if(!name || !pwd){ alert('Enter church name and password'); return; }
+      await db.collection(COL_CHURCHES).add({name, password:pwd, createdAt:new Date().toISOString()});
+      el('newChurchName').value=''; el('newChurchPwd').value='';
+      await loadChurchOptions();
+      await renderChurchTable();
+    };
+
+    // Change admin pwd
+    el('btnChangeAdminPwd').onclick = async ()=>{
+      const p = el('adminPwdInput').value.trim();
+      if(!p){ alert('Enter a new admin password'); return; }
+      await db.collection(COL_META).doc(DOC_ADMIN).set({adminPwd:p}, {merge:true});
+      el('adminPwdInput').value='';
+      alert('Admin password updated');
+    };
+
+    // ===== Exports =====
+    function download(filename, text, mime='text/plain'){
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([text], {type:mime}));
+      a.download = filename; a.click();
+    }
+    function toCSV(arr){
+      if(arr.length===0) return '';
+      const cols = Array.from(arr.reduce((s,o)=>{Object.keys(o).forEach(k=>s.add(k));return s;}, new Set()));
+      const esc = v => (''+(v??'')).replace(/"/g,'""');
+      const head = cols.map(c=>`"${esc(c)}"`).join(',');
+      const rows = arr.map(o=>cols.map(c=>`"${esc(o[c])}"`).join(',')).join('\n');
+      return head+'\n'+rows;
+    }
+    el('btnExportJSON').onclick = async ()=>{
+      const qs = await db.collection(COL_CHURCHES).doc(currentChurch.id).collection(COL_MEMBERS).get();
+      const data = []; qs.forEach(d=>data.push({id:d.id, ...d.data()}));
+      download(`${currentChurch.name}_members.json`, JSON.stringify(data,null,2), 'application/json');
+    };
+    el('btnExportCSV').onclick = async ()=>{
+      const qs = await db.collection(COL_CHURCHES).doc(currentChurch.id).collection(COL_MEMBERS).get();
+      const data = []; qs.forEach(d=>data.push({id:d.id, ...d.data()}));
+      download(`${currentChurch.name}_members.csv`, toCSV(data), 'text/csv');
+    };
+    el('btnExportAllJSON').onclick = async ()=>{
+      const all = await listAllMembers();
+      download(`all_churches_members.json`, JSON.stringify(all,null,2), 'application/json');
+    };
+    el('btnExportAllCSV').onclick = async ()=>{
+      const all = await listAllMembers();
+      download(`all_churches_members.csv`, toCSV(all), 'text/csv');
+    };
+
+    // ===== Top bar =====
+    el('btnLogin').onclick = ()=> handleLogin();
+    el('btnLogout').onclick = ()=>{
+      currentChurch=null; isAdmin=false; setView('login'); setWhoAmI(); loadChurchOptions();
+    };
+
+    // ===== Init =====
+    (async function init(){
+      await ensureAdminSeed();
+      await loadChurchOptions();
+      setView('login'); setWhoAmI();
+    })();
+  </script>
+</body>
+</html>
