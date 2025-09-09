@@ -6,9 +6,8 @@
   <title>Ceylon Mission of Seventh-day Adventists Membership Directory</title>
   <style>
     :root{
-      /* Denim palette from logo */
-      --primary:#1d3557;     /* deep denim */
-      --accent:#457b9d;      /* lighter denim */
+      --primary:#1d3557;
+      --accent:#457b9d;
       --bg:#f6f8fb;
       --card:#ffffff;
       --text:#1f2937;
@@ -61,6 +60,7 @@
     th{color:var(--primary);font-weight:700}
     tr{background:#fff;border:1px solid #e5e7eb;border-radius:10px}
     .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .small{font-size:.85rem;padding:6px 8px;border-radius:8px}
   </style>
 </head>
 <body>
@@ -154,7 +154,7 @@
       <h3>Church Management</h3>
       <table>
         <thead>
-          <tr><th style="width:32%">Church</th><th style="width:32%">Password</th><th>Actions</th></tr>
+          <tr><th style="width:24%">Church</th><th style="width:20%">Password</th><th style="width:28%">Actions</th><th>Export</th></tr>
         </thead>
         <tbody id="churchTableBody"></tbody>
       </table>
@@ -253,22 +253,30 @@
 
     // ===== Seed admin password on first run =====
     async function ensureAdminSeed(){
-      const ref = db.collection(COL_META).doc(DOC_ADMIN);
-      const snap = await ref.get();
-      if(!snap.exists){
-        await ref.set({ adminPwd: 'admin777', seededAt: new Date().toISOString() });
-        console.log('Seeded admin password: admin777 (change it in Admin)');
+      try{
+        const ref = db.collection(COL_META).doc(DOC_ADMIN);
+        const snap = await ref.get();
+        if(!snap.exists){
+          await ref.set({ adminPwd: 'admin777', seededAt: new Date().toISOString() });
+          console.log('Seeded admin password: admin777 (change it in Admin)');
+        }
+      }catch(e){
+        console.error('ensureAdminSeed error', e);
       }
     }
 
     // ===== Login dropdown =====
     async function loadChurchOptions(){
-      const sel = el('loginChurch');
-      sel.innerHTML = '';
-      sel.add(new Option('Select…','',{selected:true,disabled:true}));
-      sel.add(new Option('Admin','__ADMIN__'));
-      const qs = await db.collection(COL_CHURCHES).orderBy('name').get();
-      qs.forEach(d => sel.add(new Option(d.data().name, d.id)));
+      try{
+        const sel = el('loginChurch');
+        sel.innerHTML = '';
+        sel.add(new Option('Select…','',{selected:true,disabled:true}));
+        sel.add(new Option('Admin','__ADMIN__'));
+        const qs = await db.collection(COL_CHURCHES).orderBy('name').get();
+        qs.forEach(d => sel.add(new Option(d.data().name, d.id)));
+      }catch(e){
+        console.error('loadChurchOptions error', e);
+      }
     }
 
     // ===== Login handler =====
@@ -281,24 +289,30 @@
       if(!choice){ err.textContent='Please select Admin or a Church.'; return; }
       if(!pwd){ err.textContent='Please enter the password.'; return; }
 
-      if(choice==='__ADMIN__'){
-        const doc = await db.collection(COL_META).doc(DOC_ADMIN).get();
-        const real = doc.exists ? doc.data().adminPwd : null;
-        if(pwd !== real){ err.textContent='Invalid admin password.'; return; }
-        isAdmin = true; currentChurch = null;
-        setView('admin'); setWhoAmI();
-        renderAdmin();
-      } else {
-        const d = await db.collection(COL_CHURCHES).doc(choice).get();
-        if(!d.exists){ err.textContent='Church not found.'; return; }
-        const ch = { id:d.id, ...d.data() };
-        if(pwd !== ch.password){ err.textContent='Incorrect church password.'; return; }
-        isAdmin = false; currentChurch = ch;
-        el('churchTitle').textContent = `${ch.name} – Directory`;
-        setView('church'); setWhoAmI();
-        renderMembers();
+      try{
+        if(choice==='__ADMIN__'){
+          const doc = await db.collection(COL_META).doc(DOC_ADMIN).get();
+          const real = doc.exists ? doc.data().adminPwd : null;
+          if(pwd !== real){ err.textContent='Invalid admin password.'; return; }
+          isAdmin = true; currentChurch = null;
+          setView('admin'); setWhoAmI();
+          await renderAdmin();
+        } else {
+          const d = await db.collection(COL_CHURCHES).doc(choice).get();
+          if(!d.exists){ err.textContent='Church not found.'; return; }
+          const ch = { id:d.id, ...d.data() };
+          if(pwd !== ch.password){ err.textContent='Incorrect church password.'; return; }
+          isAdmin = false; currentChurch = ch;
+          el('churchTitle').textContent = `${ch.name} – Directory`;
+          setView('church'); setWhoAmI();
+          await renderMembers();
+        }
+      }catch(e){
+        console.error('handleLogin error', e);
+        err.textContent = 'Login failed. Check console for details.';
+      } finally {
+        el('loginPassword').value = '';
       }
-      el('loginPassword').value = '';
     }
 
     // ===== Church members view =====
@@ -314,8 +328,8 @@
             <div class="muted">${m.nic||''}</div>
           </div>
           <div class="row">
-            <button class="btn" data-edit="${id}">Edit</button>
-            <button class="btn danger" data-del="${id}">Delete</button>
+            <button class="btn small" data-edit="${id}">Edit</button>
+            <button class="btn danger small" data-del="${id}">Delete</button>
           </div>
         </div>
         <div class="row" style="margin-top:6px;flex-wrap:wrap">
@@ -333,11 +347,17 @@
     }
 
     async function getMembers(){
-      const qs = await db.collection(COL_CHURCHES).doc(currentChurch.id)
-        .collection(COL_MEMBERS).get();
-      const out = [];
-      qs.forEach(doc => out.push({ id:doc.id, ...doc.data() }));
-      return out;
+      try{
+        if(!currentChurch || !currentChurch.id) return [];
+        const qs = await db.collection(COL_CHURCHES).doc(currentChurch.id)
+          .collection(COL_MEMBERS).get();
+        const out = [];
+        qs.forEach(doc => out.push({ id:doc.id, ...doc.data() }));
+        return out;
+      }catch(e){
+        console.error('getMembers error', e);
+        return [];
+      }
     }
 
     async function renderMembers(){
@@ -369,9 +389,11 @@
       cont.querySelectorAll('[data-del]').forEach(btn=>{
         btn.onclick = async ()=>{
           if(!confirm('Delete this member?')) return;
-          await db.collection(COL_CHURCHES).doc(currentChurch.id).collection(COL_MEMBERS)
-            .doc(btn.getAttribute('data-del')).delete();
-          renderMembers();
+          try{
+            await db.collection(COL_CHURCHES).doc(currentChurch.id).collection(COL_MEMBERS)
+              .doc(btn.getAttribute('data-del')).delete();
+            await renderMembers();
+          }catch(e){ console.error('delete member error', e); alert('Delete failed'); }
         };
       });
     }
@@ -414,8 +436,10 @@
       };
     }
     async function loadMember(id){
-      const d = await db.collection(COL_CHURCHES).doc(currentChurch.id).collection(COL_MEMBERS).doc(id).get();
-      return d.exists ? { id: d.id, ...d.data() } : null;
+      try{
+        const d = await db.collection(COL_CHURCHES).doc(currentChurch.id).collection(COL_MEMBERS).doc(id).get();
+        return d.exists ? { id: d.id, ...d.data() } : null;
+      }catch(e){ console.error('loadMember error', e); return null; }
     }
     function openMemberModal(id){
       const dlg = el('memberModal');
@@ -432,30 +456,45 @@
         const obj = collectMemberForm();
         if(!obj.name){ alert('Name is required'); return; }
         const col = db.collection(COL_CHURCHES).doc(currentChurch.id).collection(COL_MEMBERS);
-        if(editing){
-          await col.doc(id).set(obj, {merge:true});
-        } else {
-          obj.createdAt = new Date().toISOString();
-          await col.add(obj);
-        }
-        dlg.close(); renderMembers();
+        try{
+          if(editing){
+            await col.doc(id).set(obj, {merge:true});
+          } else {
+            obj.createdAt = new Date().toISOString();
+            await col.add(obj);
+          }
+          dlg.close(); renderMembers();
+        }catch(e){ console.error('saveMember error', e); alert('Save failed'); }
       };
     }
 
     // ===== Admin view =====
-    async function listAllMembers(){
-      // build map of churchId -> churchName
-      const map = {};
-      const chSnap = await db.collection(COL_CHURCHES).get();
-      chSnap.forEach(d => map[d.id] = d.data().name);
 
-      const qs = await db.collectionGroup(COL_MEMBERS).get();
-      const out = [];
-      qs.forEach(doc=>{
-        const churchId = doc.ref.parent.parent.id;
-        out.push({ id:doc.id, churchId, churchName: map[churchId]||'', ...doc.data() });
-      });
-      return out;
+    // robust listAllMembers - returns array of member objects with churchId & churchName
+    async function listAllMembers(){
+      try{
+        // build map of churchId -> churchName
+        const map = {};
+        const chSnap = await db.collection(COL_CHURCHES).get();
+        chSnap.forEach(d => map[d.id] = d.data().name);
+
+        const qs = await db.collectionGroup(COL_MEMBERS).get();
+        const out = [];
+        qs.forEach(doc=>{
+          try{
+            // doc.ref.parent is members collection, parent.parent is church doc
+            const churchDocRef = doc.ref.parent.parent;
+            const churchId = churchDocRef ? churchDocRef.id : 'unknown';
+            out.push({ id:doc.id, churchId, churchName: map[churchId]||'', ...doc.data() });
+          }catch(e){
+            console.warn('listAllMembers skip doc', e);
+          }
+        });
+        return out;
+      }catch(e){
+        console.error('listAllMembers error', e);
+        return [];
+      }
     }
 
     async function renderAdmin(){
@@ -481,19 +520,52 @@
         return 0;
       });
 
-      arr.forEach(m=>{
-        const d = document.createElement('div');
-        d.className = 'member';
-        d.innerHTML = `
-          <div class="row" style="justify-content:space-between">
-            <div>
-              <div class="name">${m.name||''}</div>
-              <div class="muted">${m.family||''}</div>
+      if(arr.length===0){
+        cont.innerHTML = '<div class="muted">No members found.</div>';
+        return;
+      }
+
+      // display grouped by church with an export button for each church group
+      const grouped = arr.reduce((acc,m)=>{
+        (acc[m.churchId] = acc[m.churchId] || {churchName: m.churchName || 'Unknown', members: []}).members.push(m);
+        return acc;
+      }, {});
+
+      Object.keys(grouped).forEach(chId=>{
+        const block = document.createElement('div');
+        block.className = 'card';
+        block.style.marginBottom = '10px';
+        const titleRow = document.createElement('div');
+        titleRow.className = 'row';
+        titleRow.style.justifyContent = 'space-between';
+        titleRow.innerHTML = `<div><strong>${grouped[chId].churchName}</strong> — ${grouped[chId].members.length} member(s)</div>`;
+        const btns = document.createElement('div');
+        btns.className = 'toolbar';
+        const expCsv = document.createElement('button'); expCsv.className='btn small'; expCsv.textContent='Export CSV';
+        const expJson = document.createElement('button'); expJson.className='btn small'; expJson.textContent='Export JSON';
+        expCsv.onclick = ()=> download(`${grouped[chId].churchName}_members.csv`, toCSV(grouped[chId].members), 'text/csv');
+        expJson.onclick = ()=> download(`${grouped[chId].churchName}_members.json`, JSON.stringify(grouped[chId].members, null, 2), 'application/json');
+        btns.appendChild(expCsv); btns.appendChild(expJson);
+        titleRow.appendChild(btns);
+        block.appendChild(titleRow);
+
+        // list of member names
+        grouped[chId].members.forEach(m=>{
+          const d = document.createElement('div');
+          d.className = 'member';
+          d.style.marginTop='8px';
+          d.innerHTML = `
+            <div class="row" style="justify-content:space-between">
+              <div>
+                <div class="name">${m.name||''}</div>
+                <div class="muted">${m.family||''} • ${m.nic||''}</div>
+              </div>
+              <div class="muted">${m.churchName||''}</div>
             </div>
-            <div class="muted">${m.churchName||''}</div>
-          </div>
-        `;
-        cont.appendChild(d);
+          `;
+          block.appendChild(d);
+        });
+        cont.appendChild(block);
       });
     }
     el('adminSearch').oninput = ()=> renderAdminMembers();
@@ -502,48 +574,88 @@
     async function renderChurchTable(){
       const tbody = el('churchTableBody');
       tbody.innerHTML = '';
-      const qs = await db.collection(COL_CHURCHES).orderBy('name').get();
-      qs.forEach(doc=>{
-        const ch = { id:doc.id, ...doc.data() };
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td><input data-ch-name="${ch.id}" value="${ch.name}"/></td>
-          <td><input data-ch-pwd="${ch.id}" value="${ch.password}"/></td>
-          <td>
-            <button class="btn" data-ch-save="${ch.id}">Save</button>
-            <button class="btn danger" data-ch-del="${ch.id}">Delete</button>
-          </td>
-        `;
-        tbody.appendChild(tr);
-      });
+      try{
+        const qs = await db.collection(COL_CHURCHES).orderBy('name').get();
+        qs.forEach(doc=>{
+          const ch = { id:doc.id, ...doc.data() };
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><input data-ch-name="${ch.id}" value="${escapeHtml(ch.name||'')}"/></td>
+            <td><input data-ch-pwd="${ch.id}" value="${escapeHtml(ch.password||'')}"/></td>
+            <td>
+              <button class="btn" data-ch-save="${ch.id}">Save</button>
+              <button class="btn danger" data-ch-del="${ch.id}">Delete</button>
+            </td>
+            <td>
+              <button class="btn small" data-ch-export="${ch.id}">Export CSV</button>
+              <button class="btn small" data-ch-export-json="${ch.id}">Export JSON</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
 
-      // save handlers
-      tbody.querySelectorAll('[data-ch-save]').forEach(btn=>{
-        btn.onclick = async ()=>{
-          const id = btn.getAttribute('data-ch-save');
-          const name = tbody.querySelector(`[data-ch-name="${id}"]`).value.trim();
-          const pwd  = tbody.querySelector(`[data-ch-pwd="${id}"]`).value.trim();
-          if(!name || !pwd){ alert('Name and password required'); return; }
-          await db.collection(COL_CHURCHES).doc(id).set({name, password:pwd}, {merge:true});
-          await loadChurchOptions();
-          await renderChurchTable();
-        };
-      });
-      // delete handlers
-      tbody.querySelectorAll('[data-ch-del]').forEach(btn=>{
-        btn.onclick = async ()=>{
-          if(!confirm('Delete this church and all its members?')) return;
-          const id = btn.getAttribute('data-ch-del');
-          // delete members in batches
-          const memSnap = await db.collection(COL_CHURCHES).doc(id).collection(COL_MEMBERS).get();
-          const batch = db.batch();
-          memSnap.forEach(d => batch.delete(d.ref));
-          await batch.commit();
-          await db.collection(COL_CHURCHES).doc(id).delete();
-          await loadChurchOptions();
-          await renderChurchTable();
-        };
-      });
+        // save handlers
+        tbody.querySelectorAll('[data-ch-save]').forEach(btn=>{
+          btn.onclick = async ()=>{
+            const id = btn.getAttribute('data-ch-save');
+            const name = tbody.querySelector(`[data-ch-name="${id}"]`).value.trim();
+            const pwd  = tbody.querySelector(`[data-ch-pwd="${id}"]`).value.trim();
+            if(!name || !pwd){ alert('Name and password required'); return; }
+            try{
+              await db.collection(COL_CHURCHES).doc(id).set({name, password:pwd}, {merge:true});
+              await loadChurchOptions();
+              await renderChurchTable();
+              await renderAdminMembers();
+              alert('Saved');
+            }catch(e){ console.error('save church error', e); alert('Save failed'); }
+          };
+        });
+        // delete handlers
+        tbody.querySelectorAll('[data-ch-del]').forEach(btn=>{
+          btn.onclick = async ()=>{
+            if(!confirm('Delete this church and all its members? This action cannot be undone.')) return;
+            const id = btn.getAttribute('data-ch-del');
+            try{
+              // delete members in batch (simple approach)
+              const memSnap = await db.collection(COL_CHURCHES).doc(id).collection(COL_MEMBERS).get();
+              const batch = db.batch();
+              memSnap.forEach(d => batch.delete(d.ref));
+              await batch.commit();
+              await db.collection(COL_CHURCHES).doc(id).delete();
+              await loadChurchOptions();
+              await renderChurchTable();
+              await renderAdminMembers();
+            }catch(e){ console.error('delete church error', e); alert('Delete failed'); }
+          };
+        });
+
+        // export handlers per church
+        tbody.querySelectorAll('[data-ch-export]').forEach(btn=>{
+          btn.onclick = async ()=>{
+            const id = btn.getAttribute('data-ch-export');
+            try{
+              const chDoc = await db.collection(COL_CHURCHES).doc(id).get();
+              const chName = chDoc.exists ? chDoc.data().name : id;
+              const memSnap = await db.collection(COL_CHURCHES).doc(id).collection(COL_MEMBERS).get();
+              const data = []; memSnap.forEach(d=> data.push({id:d.id, ...d.data()}));
+              download(`${sanitizeFilename(chName)}_members.csv`, toCSV(data), 'text/csv');
+            }catch(e){ console.error('export church csv error', e); alert('Export failed'); }
+          };
+        });
+        tbody.querySelectorAll('[data-ch-export-json]').forEach(btn=>{
+          btn.onclick = async ()=>{
+            const id = btn.getAttribute('data-ch-export-json');
+            try{
+              const chDoc = await db.collection(COL_CHURCHES).doc(id).get();
+              const chName = chDoc.exists ? chDoc.data().name : id;
+              const memSnap = await db.collection(COL_CHURCHES).doc(id).collection(COL_MEMBERS).get();
+              const data = []; memSnap.forEach(d=> data.push({id:d.id, ...d.data()}));
+              download(`${sanitizeFilename(chName)}_members.json`, JSON.stringify(data,null,2), 'application/json');
+            }catch(e){ console.error('export church json error', e); alert('Export failed'); }
+          };
+        });
+
+      }catch(e){ console.error('renderChurchTable error', e); tbody.innerHTML = '<tr><td colspan="4" class="muted">Could not load churches.</td></tr>'; }
     }
 
     // Add church
@@ -551,59 +663,85 @@
       const name = el('newChurchName').value.trim();
       const pwd  = el('newChurchPwd').value.trim();
       if(!name || !pwd){ alert('Enter church name and password'); return; }
-      await db.collection(COL_CHURCHES).add({name, password:pwd, createdAt:new Date().toISOString()});
-      el('newChurchName').value=''; el('newChurchPwd').value='';
-      await loadChurchOptions();
-      await renderChurchTable();
+      try{
+        await db.collection(COL_CHURCHES).add({name, password:pwd, createdAt:new Date().toISOString()});
+        el('newChurchName').value=''; el('newChurchPwd').value='';
+        await loadChurchOptions();
+        await renderChurchTable();
+        alert('Church added');
+      }catch(e){ console.error('add church error', e); alert('Add failed'); }
     };
 
     // Change admin pwd
     el('btnChangeAdminPwd').onclick = async ()=>{
       const p = el('adminPwdInput').value.trim();
       if(!p){ alert('Enter a new admin password'); return; }
-      await db.collection(COL_META).doc(DOC_ADMIN).set({adminPwd:p}, {merge:true});
-      el('adminPwdInput').value='';
-      alert('Admin password updated');
+      try{
+        await db.collection(COL_META).doc(DOC_ADMIN).set({adminPwd:p}, {merge:true});
+        el('adminPwdInput').value='';
+        alert('Admin password updated');
+      }catch(e){ console.error('change admin pwd error', e); alert('Update failed'); }
     };
 
-    // ===== Exports =====
+    // ===== Exports helpers =====
     function download(filename, text, mime='text/plain'){
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([text], {type:mime}));
       a.download = filename; a.click();
     }
+    function escapeHtml(s){ return (s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    function sanitizeFilename(s){ return (s||'file').replace(/[^\w\d_\- ]/g,'').trim().replace(/\s+/g,'_'); }
+
     function toCSV(arr){
-      if(arr.length===0) return '';
-      const cols = Array.from(arr.reduce((s,o)=>{Object.keys(o).forEach(k=>s.add(k));return s;}, new Set()));
-      const esc = v => (''+(v??'')).replace(/"/g,'""');
+      if(!arr || arr.length===0) return '';
+      // flatten objects to shallow keys only and keep common columns
+      const colsSet = new Set();
+      arr.forEach(o=>{
+        Object.keys(o).forEach(k=>{
+          const v = o[k];
+          // skip large nested arrays/objects - convert to string
+          colsSet.add(k);
+        });
+      });
+      const cols = Array.from(colsSet);
+      const esc = v => (''+(v===undefined||v===null?'':v)).replace(/"/g,'""');
       const head = cols.map(c=>`"${esc(c)}"`).join(',');
       const rows = arr.map(o=>cols.map(c=>`"${esc(o[c])}"`).join(',')).join('\n');
       return head+'\n'+rows;
     }
+
     el('btnExportJSON').onclick = async ()=>{
-      const qs = await db.collection(COL_CHURCHES).doc(currentChurch.id).collection(COL_MEMBERS).get();
-      const data = []; qs.forEach(d=>data.push({id:d.id, ...d.data()}));
-      download(`${currentChurch.name}_members.json`, JSON.stringify(data,null,2), 'application/json');
+      if(!currentChurch) return alert('Not signed in as a church');
+      try{
+        const qs = await db.collection(COL_CHURCHES).doc(currentChurch.id).collection(COL_MEMBERS).get();
+        const data = []; qs.forEach(d=>data.push({id:d.id, ...d.data()}));
+        download(`${sanitizeFilename(currentChurch.name)}_members.json`, JSON.stringify(data,null,2), 'application/json');
+      }catch(e){ console.error('export church json error', e); alert('Export failed'); }
     };
     el('btnExportCSV').onclick = async ()=>{
-      const qs = await db.collection(COL_CHURCHES).doc(currentChurch.id).collection(COL_MEMBERS).get();
-      const data = []; qs.forEach(d=>data.push({id:d.id, ...d.data()}));
-      download(`${currentChurch.name}_members.csv`, toCSV(data), 'text/csv');
+      if(!currentChurch) return alert('Not signed in as a church');
+      try{
+        const qs = await db.collection(COL_CHURCHES).doc(currentChurch.id).collection(COL_MEMBERS).get();
+        const data = []; qs.forEach(d=>data.push({id:d.id, ...d.data()}));
+        download(`${sanitizeFilename(currentChurch.name)}_members.csv`, toCSV(data), 'text/csv');
+      }catch(e){ console.error('export church csv error', e); alert('Export failed'); }
     };
     el('btnExportAllJSON').onclick = async ()=>{
-      const all = await listAllMembers();
-      download(`all_churches_members.json`, JSON.stringify(all,null,2), 'application/json');
+      try{
+        const all = await listAllMembers();
+        download(`all_churches_members.json`, JSON.stringify(all,null,2), 'application/json');
+      }catch(e){ console.error('export all json error', e); alert('Export failed'); }
     };
     el('btnExportAllCSV').onclick = async ()=>{
-      const all = await listAllMembers();
-      download(`all_churches_members.csv`, toCSV(all), 'text/csv');
+      try{
+        const all = await listAllMembers();
+        download(`all_churches_members.csv`, toCSV(all), 'text/csv');
+      }catch(e){ console.error('export all csv error', e); alert('Export failed'); }
     };
 
     // ===== Top bar =====
     el('btnLogin').onclick = ()=> handleLogin();
-    el('btnLogout').onclick = ()=>{
-      currentChurch=null; isAdmin=false; setView('login'); setWhoAmI(); loadChurchOptions();
-    };
+    el('btnLogout').onclick = ()=>{ currentChurch=null; isAdmin=false; setView('login'); setWhoAmI(); loadChurchOptions(); };
 
     // ===== Init =====
     (async function init(){
