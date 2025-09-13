@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Ceylon Mission of Seventh-day Adventists Membership Directory</title>
+  <title>Ceylon Mission of Seventh-day Adventists Membership Directory — Fixed</title>
   <style>
     :root{
       --primary:#1d3557;
@@ -61,6 +61,7 @@
     tr{background:#fff;border:1px solid #e5e7eb;border-radius:10px}
     .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
     .small{font-size:.85rem;padding:6px 8px;border-radius:8px}
+    .debug { margin-top:8px; font-size:.9rem; color:#444; }
   </style>
 </head>
 <body>
@@ -121,55 +122,68 @@
       </div>
 
       <div id="memberContainer"></div>
+      <div class="debug">Tip: open browser console (F12) to see debug logs while testing delete.</div>
     </div>
   </section>
 
   <!-- ADMIN VIEW -->
   <section class="wrap hidden" id="adminSection">
-    <div class="card">
-      <div class="row" style="justify-content:space-between">
-        <h2>Admin Dashboard</h2>
-        <div class="toolbar">
-          <button class="btn" id="btnExportAllJSON">Export All JSON</button>
-          <button class="btn" id="btnExportAllCSV">Export All Spreadsheet</button>
-        </div>
-      </div>
-
-      <div class="toolbar">
-        <input style="flex:1" type="text" id="adminSearch" placeholder="Search all members (Name / NIC / Church)" />
-        <label>Sort by
-          <select id="adminSort">
-            <option value="name">Name</option>
-            <option value="church">Church</option>
-            <option value="birthday">Birthday</option>
-            <option value="age">Age</option>
-          </select>
-        </label>
-      </div>
-
-      <div id="adminMemberContainer"></div>
+    <!-- Tabs -->
+    <div class="toolbar" style="margin-bottom:12px">
+      <button class="btn primary" id="tabAdmin">Admin Dashboard</button>
+      <button class="btn" id="tabChurch">Church Management</button>
     </div>
 
-    <div class="card">
-      <h3>Church Management</h3>
-      <table>
-        <thead>
-          <tr><th style="width:24%">Church</th><th style="width:20%">Password</th><th style="width:28%">Actions</th><th>Export</th></tr>
-        </thead>
-        <tbody id="churchTableBody"></tbody>
-      </table>
+    <!-- Admin Dashboard Tab -->
+    <div id="adminDashboardTab">
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <h2>Admin Dashboard</h2>
+          <div class="toolbar">
+            <button class="btn" id="btnExportAllJSON">Export All JSON</button>
+            <button class="btn" id="btnExportAllCSV">Export All Spreadsheet</button>
+          </div>
+        </div>
 
-      <hr style="border:0;border-top:1px solid var(--border);margin:14px 0">
-      <div class="toolbar">
-        <input id="newChurchName" placeholder="New church name" />
-        <input id="newChurchPwd" placeholder="Password" />
-        <button class="btn ok" id="btnAddChurch">Add Church</button>
+        <div class="toolbar">
+          <input style="flex:1" type="text" id="adminSearch" placeholder="Search all members (Name / NIC / Church)" />
+          <label>Sort by
+            <select id="adminSort">
+              <option value="name">Name</option>
+              <option value="church">Church</option>
+              <option value="birthday">Birthday</option>
+              <option value="age">Age</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="adminMemberContainer"></div>
       </div>
+    </div>
 
-      <h4 style="margin-top:18px">Admin Password</h4>
-      <div class="toolbar">
-        <input id="adminPwdInput" type="password" placeholder="New admin password" />
-        <button class="btn accent" id="btnChangeAdminPwd">Change Admin Password</button>
+    <!-- Church Management Tab -->
+    <div id="churchManagementTab" class="hidden">
+      <div class="card">
+        <h3>Church Management</h3>
+        <table>
+          <thead>
+            <tr><th style="width:24%">Church</th><th style="width:20%">Password</th><th style="width:28%">Actions</th><th>Export</th></tr>
+          </thead>
+          <tbody id="churchTableBody"></tbody>
+        </table>
+
+        <hr style="border:0;border-top:1px solid var(--border);margin:14px 0">
+        <div class="toolbar">
+          <input id="newChurchName" placeholder="New church name" />
+          <input id="newChurchPwd" placeholder="Password" />
+          <button class="btn ok" id="btnAddChurch">Add Church</button>
+        </div>
+
+        <h4 style="margin-top:18px">Admin Password</h4>
+        <div class="toolbar">
+          <input id="adminPwdInput" type="password" placeholder="New admin password" />
+          <button class="btn accent" id="btnChangeAdminPwd">Change Admin Password</button>
+        </div>
       </div>
     </div>
   </section>
@@ -205,8 +219,38 @@
   </dialog>
 
   <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js">
+// ===== Tab switching =====
+function showTab(tab) {
+  document.getElementById("adminDashboardTab").classList.toggle("hidden", tab !== "dashboard");
+  document.getElementById("churchManagementTab").classList.toggle("hidden", tab !== "church");
+  document.getElementById("tabAdmin").classList.toggle("primary", tab === "dashboard");
+  document.getElementById("tabChurch").classList.toggle("primary", tab === "church");
+}
+
+document.getElementById("tabAdmin").onclick = () => showTab("dashboard");
+document.getElementById("tabChurch").onclick = () => showTab("church");
+
+// default to Admin Dashboard tab
+showTab("dashboard");
+
+</script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js">
+// ===== Tab switching =====
+function showTab(tab) {
+  document.getElementById("adminDashboardTab").classList.toggle("hidden", tab !== "dashboard");
+  document.getElementById("churchManagementTab").classList.toggle("hidden", tab !== "church");
+  document.getElementById("tabAdmin").classList.toggle("primary", tab === "dashboard");
+  document.getElementById("tabChurch").classList.toggle("primary", tab === "church");
+}
+
+document.getElementById("tabAdmin").onclick = () => showTab("dashboard");
+document.getElementById("tabChurch").onclick = () => showTab("church");
+
+// default to Admin Dashboard tab
+showTab("dashboard");
+
+</script>
 
   <script>
     // ===== Your Firebase config =====
@@ -316,7 +360,9 @@
     }
 
     // ===== Church members view =====
-    function memberCard(m, id){
+    function memberCard(m){
+      // Ensure we always expect m.id to exist; protect against undefined
+      const id = m.id || '';
       const div = document.createElement('div');
       div.className = 'member';
       const age = calcAge(m.birthday);
@@ -361,12 +407,14 @@
     }
 
     async function renderMembers(){
+      console.log('renderMembers — currentChurch:', currentChurch && currentChurch.id);
       const cont = el('memberContainer');
       cont.innerHTML = '';
       const sort = el('sortSelect').value;
       const q = (el('searchInput').value||'').toLowerCase();
 
       let arr = await getMembers();
+      console.log('renderMembers — total fetched', arr.length);
       // filter
       arr = arr.filter(m => [m.name,m.family,m.nic].map(x=>(x||'').toLowerCase()).join(' ').includes(q));
       // sort
@@ -380,21 +428,39 @@
       });
 
       el('countPill').textContent = `${arr.length} member${arr.length===1?'':'s'}`;
-      arr.forEach(m => cont.appendChild(memberCard(m, m.id)));
+      arr.forEach(m => cont.appendChild(memberCard(m)));
 
-      // bind edit/delete
+      // bind edit/delete - more robust, with dataset and logs
       cont.querySelectorAll('[data-edit]').forEach(btn=>{
-        btn.onclick = ()=> openMemberModal(btn.getAttribute('data-edit'));
+        btn.removeEventListener('click', ()=>{}); // noop attempt to avoid dupes
+        btn.addEventListener('click', ()=>{
+          const id = btn.dataset.edit || btn.getAttribute('data-edit');
+          if(!id){ console.error('Edit clicked but id missing on button', btn); alert('Edit failed: missing id'); return; }
+          openMemberModal(id);
+        });
       });
       cont.querySelectorAll('[data-del]').forEach(btn=>{
-        btn.onclick = async ()=>{
-          if(!confirm('Delete this member?')) return;
+        btn.removeEventListener('click', ()=>{}); // noop attempt to avoid dupes
+        btn.addEventListener('click', async ()=>{
+          const id = btn.dataset.del || btn.getAttribute('data-del');
+          if(!id){ console.error('Delete: missing id on button', btn); alert('Delete failed: missing id'); return; }
+          if(!currentChurch || !currentChurch.id){ console.error('Delete attempted without currentChurch set', currentChurch); alert('Delete failed: you must be signed in as a Church (not Admin)'); return; }
+          if(!confirm('Delete this member? This action cannot be undone.')) return;
           try{
+            console.log('Deleting member', id, 'from church', currentChurch.id);
             await db.collection(COL_CHURCHES).doc(currentChurch.id).collection(COL_MEMBERS)
-              .doc(btn.getAttribute('data-del')).delete();
+              .doc(id).delete();
+            console.log('Deleted member', id);
             await renderMembers();
-          }catch(e){ console.error('delete member error', e); alert('Delete failed'); }
-        };
+          }catch(err){
+            console.error('delete member error', err);
+            if(err && err.code === 'permission-denied') {
+              alert('Delete failed: permission denied. Check Firestore rules or use Admin to manage data.');
+            } else {
+              alert('Delete failed — see console for details.');
+            }
+          }
+        });
       });
     }
 
@@ -469,20 +535,15 @@
     }
 
     // ===== Admin view =====
-
-    // robust listAllMembers - returns array of member objects with churchId & churchName
     async function listAllMembers(){
       try{
-        // build map of churchId -> churchName
         const map = {};
         const chSnap = await db.collection(COL_CHURCHES).get();
         chSnap.forEach(d => map[d.id] = d.data().name);
-
         const qs = await db.collectionGroup(COL_MEMBERS).get();
         const out = [];
         qs.forEach(doc=>{
           try{
-            // doc.ref.parent is members collection, parent.parent is church doc
             const churchDocRef = doc.ref.parent.parent;
             const churchId = churchDocRef ? churchDocRef.id : 'unknown';
             out.push({ id:doc.id, churchId, churchName: map[churchId]||'', ...doc.data() });
@@ -525,7 +586,6 @@
         return;
       }
 
-      // display grouped by church with an export button for each church group
       const grouped = arr.reduce((acc,m)=>{
         (acc[m.churchId] = acc[m.churchId] || {churchName: m.churchName || 'Unknown', members: []}).members.push(m);
         return acc;
@@ -549,7 +609,6 @@
         titleRow.appendChild(btns);
         block.appendChild(titleRow);
 
-        // list of member names
         grouped[chId].members.forEach(m=>{
           const d = document.createElement('div');
           d.className = 'member';
@@ -629,7 +688,7 @@
           };
         });
 
-        // export handlers per church
+        // export handlers per church (unchanged)
         tbody.querySelectorAll('[data-ch-export]').forEach(btn=>{
           btn.onclick = async ()=>{
             const id = btn.getAttribute('data-ch-export');
@@ -658,7 +717,7 @@
       }catch(e){ console.error('renderChurchTable error', e); tbody.innerHTML = '<tr><td colspan="4" class="muted">Could not load churches.</td></tr>'; }
     }
 
-    // Add church
+    // Add church (unchanged)
     el('btnAddChurch').onclick = async ()=>{
       const name = el('newChurchName').value.trim();
       const pwd  = el('newChurchPwd').value.trim();
@@ -672,7 +731,7 @@
       }catch(e){ console.error('add church error', e); alert('Add failed'); }
     };
 
-    // Change admin pwd
+    // Change admin pwd (unchanged)
     el('btnChangeAdminPwd').onclick = async ()=>{
       const p = el('adminPwdInput').value.trim();
       if(!p){ alert('Enter a new admin password'); return; }
@@ -694,22 +753,16 @@
 
     function toCSV(arr){
       if(!arr || arr.length===0) return '';
-      // flatten objects to shallow keys only and keep common columns
       const colsSet = new Set();
-      arr.forEach(o=>{
-        Object.keys(o).forEach(k=>{
-          const v = o[k];
-          // skip large nested arrays/objects - convert to string
-          colsSet.add(k);
-        });
-      });
+      arr.forEach(o=> Object.keys(o).forEach(k=> colsSet.add(k)) );
       const cols = Array.from(colsSet);
       const esc = v => (''+(v===undefined||v===null?'':v)).replace(/"/g,'""');
       const head = cols.map(c=>`"${esc(c)}"`).join(',');
-      const rows = arr.map(o=>cols.map(c=>`"${esc(o[c])}"`).join(',')).join('\n');
-      return head+'\n'+rows;
+      const rows = arr.map(o=>cols.map(c=>`"${esc(o[c])}"`).join(',')).join('\\n');
+      return head+'\\n'+rows;
     }
 
+    // export handlers (unchanged)
     el('btnExportJSON').onclick = async ()=>{
       if(!currentChurch) return alert('Not signed in as a church');
       try{
@@ -748,7 +801,23 @@
       await ensureAdminSeed();
       await loadChurchOptions();
       setView('login'); setWhoAmI();
+      console.log('App initialized — ready for testing deletes. Remember: delete works when signed in as a Church (not Admin).');
     })();
-  </script>
+  
+// ===== Tab switching =====
+function showTab(tab) {
+  document.getElementById("adminDashboardTab").classList.toggle("hidden", tab !== "dashboard");
+  document.getElementById("churchManagementTab").classList.toggle("hidden", tab !== "church");
+  document.getElementById("tabAdmin").classList.toggle("primary", tab === "dashboard");
+  document.getElementById("tabChurch").classList.toggle("primary", tab === "church");
+}
+
+document.getElementById("tabAdmin").onclick = () => showTab("dashboard");
+document.getElementById("tabChurch").onclick = () => showTab("church");
+
+// default to Admin Dashboard tab
+showTab("dashboard");
+
+</script>
 </body>
 </html>
