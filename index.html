@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Ceylon Mission of Seventh-day Adventists Membership Directory — Fixed</title>
+  <title>Ceylon Mission of Seventh-day Adventists Membership Directory — Tabs</title>
   <style>
     :root{
       --primary:#1d3557;
@@ -122,7 +122,6 @@
       </div>
 
       <div id="memberContainer"></div>
-      <div class="debug">Tip: open browser console (F12) to see debug logs while testing delete.</div>
     </div>
   </section>
 
@@ -219,38 +218,8 @@
   </dialog>
 
   <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js">
-// ===== Tab switching =====
-function showTab(tab) {
-  document.getElementById("adminDashboardTab").classList.toggle("hidden", tab !== "dashboard");
-  document.getElementById("churchManagementTab").classList.toggle("hidden", tab !== "church");
-  document.getElementById("tabAdmin").classList.toggle("primary", tab === "dashboard");
-  document.getElementById("tabChurch").classList.toggle("primary", tab === "church");
-}
-
-document.getElementById("tabAdmin").onclick = () => showTab("dashboard");
-document.getElementById("tabChurch").onclick = () => showTab("church");
-
-// default to Admin Dashboard tab
-showTab("dashboard");
-
-</script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js">
-// ===== Tab switching =====
-function showTab(tab) {
-  document.getElementById("adminDashboardTab").classList.toggle("hidden", tab !== "dashboard");
-  document.getElementById("churchManagementTab").classList.toggle("hidden", tab !== "church");
-  document.getElementById("tabAdmin").classList.toggle("primary", tab === "dashboard");
-  document.getElementById("tabChurch").classList.toggle("primary", tab === "church");
-}
-
-document.getElementById("tabAdmin").onclick = () => showTab("dashboard");
-document.getElementById("tabChurch").onclick = () => showTab("church");
-
-// default to Admin Dashboard tab
-showTab("dashboard");
-
-</script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
   <script>
     // ===== Your Firebase config =====
@@ -563,15 +532,44 @@ showTab("dashboard");
       await renderChurchTable();
     }
 
-    async function renderAdminMembers(){
+    // ===== Readonly member card for Admin =====
+    function readonlyMemberCard(m) {
+      const div = document.createElement('div');
+      div.className = 'member';
+      const age = calcAge(m.birthday);
+      div.innerHTML = `
+        <div class="row" style="justify-content:space-between">
+          <div>
+            <div class="name">${m.name || ''}</div>
+            <div class="muted">${m.family || ''}</div>
+            <div class="muted">${m.nic || ''}</div>
+          </div>
+          <div class="muted">${m.churchName || ''}</div>
+        </div>
+        <div class="row" style="margin-top:6px;flex-wrap:wrap">
+          ${m.phone ? `<span class="pill">📞 ${m.phone}</span>` : ''}
+          ${m.email ? `<span class="pill">✉️ ${m.email}</span>` : ''}
+          ${m.address ? `<span class="pill">🏠 ${m.address}</span>` : ''}
+          ${m.gender ? `<span class="pill">⚥ ${m.gender}</span>` : ''}
+          ${m.birthday ? `<span class="pill">🎂 ${fmtDate(m.birthday)}${age !== '' ? ` • ${age}` : ''}</span>` : ''}
+          ${m.baptism ? `<span class="pill">✝ ${fmtDate(m.baptism)}</span>` : ''}
+          ${(m.ministries && m.ministries.length) ? `<span class="pill">🎖 ${m.ministries.join(', ')}</span>` : ''}
+        </div>
+        ${m.notes ? `<div class="muted" style="margin-top:6px">${m.notes}</div>` : ''}
+      `;
+      return div;
+    }
+
+    // ===== Admin Dashboard (click-to-expand) =====
+    async function renderAdminMembers() {
       const cont = el('adminMemberContainer');
       cont.innerHTML = '';
-      const q = (el('adminSearch').value||'').toLowerCase();
+      const q = (el('adminSearch').value || '').toLowerCase();
       const sort = el('adminSort').value;
 
       let arr = await listAllMembers();
-      arr = arr.filter(m => [m.name,m.family,m.nic,m.churchName]
-        .map(x=>(x||'').toLowerCase()).join(' ').includes(q));
+      arr = arr.filter(m => [m.name, m.family, m.nic, m.churchName]
+        .map(x => (x || '').toLowerCase()).join(' ').includes(q));
 
       arr.sort((a,b)=>{
         if(sort==='name') return (a.name||'').localeCompare(b.name||'');
@@ -581,11 +579,7 @@ showTab("dashboard");
         return 0;
       });
 
-      if(arr.length===0){
-        cont.innerHTML = '<div class="muted">No members found.</div>';
-        return;
-      }
-
+      // Group by church
       const grouped = arr.reduce((acc,m)=>{
         (acc[m.churchId] = acc[m.churchId] || {churchName: m.churchName || 'Unknown', members: []}).members.push(m);
         return acc;
@@ -595,38 +589,55 @@ showTab("dashboard");
         const block = document.createElement('div');
         block.className = 'card';
         block.style.marginBottom = '10px';
+
         const titleRow = document.createElement('div');
         titleRow.className = 'row';
         titleRow.style.justifyContent = 'space-between';
-        titleRow.innerHTML = `<div><strong>${grouped[chId].churchName}</strong> — ${grouped[chId].members.length} member(s)</div>`;
-        const btns = document.createElement('div');
-        btns.className = 'toolbar';
-        const expCsv = document.createElement('button'); expCsv.className='btn small'; expCsv.textContent='Export CSV';
-        const expJson = document.createElement('button'); expJson.className='btn small'; expJson.textContent='Export JSON';
-        expCsv.onclick = ()=> download(`${grouped[chId].churchName}_members.csv`, toCSV(grouped[chId].members), 'text/csv');
-        expJson.onclick = ()=> download(`${grouped[chId].churchName}_members.json`, JSON.stringify(grouped[chId].members, null, 2), 'application/json');
-        btns.appendChild(expCsv); btns.appendChild(expJson);
-        titleRow.appendChild(btns);
-        block.appendChild(titleRow);
+        const title = document.createElement('div');
+        title.className = 'name';
+        title.style.cursor = 'pointer';
+        title.textContent = `${grouped[chId].churchName} — ${grouped[chId].members.length} member(s)`;
 
-        grouped[chId].members.forEach(m=>{
-          const d = document.createElement('div');
-          d.className = 'member';
-          d.style.marginTop='8px';
-          d.innerHTML = `
-            <div class="row" style="justify-content:space-between">
-              <div>
-                <div class="name">${m.name||''}</div>
-                <div class="muted">${m.family||''} • ${m.nic||''}</div>
-              </div>
-              <div class="muted">${m.churchName||''}</div>
-            </div>
-          `;
-          block.appendChild(d);
-        });
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'btn small';
+        toggleBtn.textContent = 'Show members';
+        // members container (hidden by default)
+        const membersDiv = document.createElement('div');
+        membersDiv.className = 'hidden';
+        membersDiv.style.marginTop = '8px';
+
+        // populate when expanded
+        function populate(){
+          if(!membersDiv.hasChildNodes()){
+            grouped[chId].members.forEach(m => {
+              if(!m.churchName) m.churchName = grouped[chId].churchName;
+              membersDiv.appendChild(readonlyMemberCard(m));
+            });
+          }
+        }
+
+        title.onclick = () => {
+          membersDiv.classList.toggle('hidden');
+          toggleBtn.textContent = membersDiv.classList.contains('hidden') ? 'Show members' : 'Hide members';
+          populate();
+        };
+        toggleBtn.onclick = () => {
+          title.onclick();
+        };
+
+        const left = document.createElement('div');
+        left.appendChild(title);
+        const right = document.createElement('div');
+        right.appendChild(toggleBtn);
+        titleRow.appendChild(left);
+        titleRow.appendChild(right);
+
+        block.appendChild(titleRow);
+        block.appendChild(membersDiv);
         cont.appendChild(block);
       });
     }
+
     el('adminSearch').oninput = ()=> renderAdminMembers();
     el('adminSort').onchange = ()=> renderAdminMembers();
 
@@ -758,8 +769,8 @@ showTab("dashboard");
       const cols = Array.from(colsSet);
       const esc = v => (''+(v===undefined||v===null?'':v)).replace(/"/g,'""');
       const head = cols.map(c=>`"${esc(c)}"`).join(',');
-      const rows = arr.map(o=>cols.map(c=>`"${esc(o[c])}"`).join(',')).join('\\n');
-      return head+'\\n'+rows;
+      const rows = arr.map(o=>cols.map(c=>`"${esc(o[c])}"`).join(',')).join('\n');
+      return head+'\n'+rows;
     }
 
     // export handlers (unchanged)
@@ -796,6 +807,24 @@ showTab("dashboard");
     el('btnLogin').onclick = ()=> handleLogin();
     el('btnLogout').onclick = ()=>{ currentChurch=null; isAdmin=false; setView('login'); setWhoAmI(); loadChurchOptions(); };
 
+    // ===== Tab switching =====
+    function showTab(tab){
+      el('adminDashboardTab').classList.toggle('hidden', tab!=='dashboard');
+      el('churchManagementTab').classList.toggle('hidden', tab!=='church');
+      el('tabAdmin').classList.toggle('primary', tab==='dashboard');
+      el('tabChurch').classList.toggle('primary', tab==='church');
+    }
+    // safe attach (these elements exist once adminSection is in the DOM)
+    document.addEventListener('DOMContentLoaded', ()=> {
+      const tabAdmin = el('tabAdmin');
+      const tabChurch = el('tabChurch');
+      if(tabAdmin && tabChurch){
+        tabAdmin.onclick = ()=> showTab('dashboard');
+        tabChurch.onclick = ()=> showTab('church');
+        showTab('dashboard');
+      }
+    });
+
     // ===== Init =====
     (async function init(){
       await ensureAdminSeed();
@@ -803,21 +832,6 @@ showTab("dashboard");
       setView('login'); setWhoAmI();
       console.log('App initialized — ready for testing deletes. Remember: delete works when signed in as a Church (not Admin).');
     })();
-  
-// ===== Tab switching =====
-function showTab(tab) {
-  document.getElementById("adminDashboardTab").classList.toggle("hidden", tab !== "dashboard");
-  document.getElementById("churchManagementTab").classList.toggle("hidden", tab !== "church");
-  document.getElementById("tabAdmin").classList.toggle("primary", tab === "dashboard");
-  document.getElementById("tabChurch").classList.toggle("primary", tab === "church");
-}
-
-document.getElementById("tabAdmin").onclick = () => showTab("dashboard");
-document.getElementById("tabChurch").onclick = () => showTab("church");
-
-// default to Admin Dashboard tab
-showTab("dashboard");
-
-</script>
+  </script>
 </body>
 </html>
