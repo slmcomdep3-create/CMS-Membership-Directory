@@ -63,6 +63,20 @@
     .small{font-size:.85rem;padding:6px 8px;border-radius:8px}
     .debug { margin-top:8px; font-size:.9rem; color:#444; }
   </style>
+
+<style>
+.status-label {
+  display:inline-block;
+  margin-top:4px;
+  padding:2px 6px;
+  border-radius:8px;
+  font-size:0.9em;
+}
+.status-requested { background:#fff3cd; color:#856404; }
+.status-released { background:#cce5ff; color:#004085; }
+.status-accepted { background:#d4edda; color:#155724; }
+</style>
+
 </head>
 <body>
   <header>
@@ -81,7 +95,7 @@
   <!-- LOGIN -->
   <section class="wrap" id="loginSection">
     <div class="card">
-      <h2>Login</h2>
+      <h2>Login</h2><button id="btnNotifications" class="btn" title="Notifications" style="margin-left:auto;display:none;">🛎️ <span id="notifCount" class="muted">0</span></button></div>
       <div class="toolbar">
         <label>Church / Role
           <select id="loginChurch" style="min-width:220px"></select>
@@ -99,11 +113,12 @@
   <section class="wrap hidden" id="churchSection">
     <div class="card">
       <div class="row" style="justify-content:space-between">
-        <h2 id="churchTitle">Church Directory</h2>
+        <div style="display:flex;align-items:center;gap:12px;"><h2 id="churchTitle">Church Directory</h2>
         <div class="toolbar">
           <button class="btn" id="btnExportJSON">Export JSON</button>
           <button class="btn" id="btnExportCSV">Export Spreadsheet</button>
           <button class="btn primary" id="btnAdd">Add Member</button>
+          <button class="btn" id="btnRequestTransfer">Request Transfer</button>
         </div>
       </div>
 
@@ -122,6 +137,7 @@
       </div>
 
       <div id="memberContainer"></div>
+      <div id="transferContainer" style="margin-top:20px"></div>
     </div>
   </section>
 
@@ -141,7 +157,7 @@
           <div class="toolbar">
             <button class="btn" id="btnExportAllJSON">Export All JSON</button>
             <button class="btn" id="btnExportAllCSV">Export All Spreadsheet</button>
-          </div>
+          <span class="pill" id="totalMembersPill">0 total</span></div>
         </div>
 
         <div class="toolbar">
@@ -217,9 +233,84 @@
     </form>
   </dialog>
 
+
+  <!-- TRANSFER REQUEST MODAL -->
+  <dialog id="requestTransferModal" class="card">
+    <h3>Request Transfer</h3>
+    <form method="dialog" id="requestTransferForm">
+      <label>From Church<select id="req_from_church"></select></label>
+      <label>Member Name<input id="req_member_name" required></label>
+      <label>NIC (optional)<input id="req_member_nic"></label>
+      <label>Board Action No.<input id="req_board_action" required></label>
+      <label>Notes<textarea id="req_notes"></textarea></label>
+      <menu>
+        <button value="cancel">Cancel</button>
+        <button id="confirmRequestTransfer" class="btn primary">Submit</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <!-- RELEASE MODAL -->
+  <dialog id="releaseModal" class="card">
+    <h3>Release Member</h3>
+    <form method="dialog" id="releaseForm">
+      <label>Release Board Action No.<input id="release_board_action" required></label>
+      <label>Notes<textarea id="release_notes"></textarea></label>
+      <menu>
+        <button value="cancel">Cancel</button>
+        <button id="confirmRelease" class="btn primary">Release</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <!-- ACCEPT MODAL -->
+  <dialog id="acceptModal" class="card">
+    <h3>Accept Member</h3>
+    <form method="dialog" id="acceptForm">
+      <label>Acceptance Board Action No.<input id="accept_board_action" required></label>
+      <label>Notes<textarea id="accept_notes"></textarea></label>
+      <menu>
+        <button value="cancel">Cancel</button>
+        <button id="confirmAccept" class="btn primary">Accept</button>
+      </menu>
+    </form>
+  </dialog>
+
+
+  <!-- Notifications Modal -->
+  <dialog id="notificationsModal" class="card" style="max-width:640px;">
+    <h3>Notifications</h3>
+    <div id="notificationsList" class="vstack" style="gap:8px; max-height:50vh; overflow:auto;"></div>
+    <menu>
+      <button value="cancel">Close</button>
+    </menu>
+  </dialog>
+
   <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js">
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    if (typeof loadChurchOptions === 'function') {
+      loadChurchOptions();
+    }
+  } catch (e) {
+    console.error('Failed to load church options on DOMContentLoaded', e);
+  }
+});
+
+</script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js">
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    if (typeof loadChurchOptions === 'function') {
+      loadChurchOptions();
+    }
+  } catch (e) {
+    console.error('Failed to load church options on DOMContentLoaded', e);
+  }
+});
+
+</script>
 
   <script>
     // ===== Your Firebase config =====
@@ -251,7 +342,7 @@
       return isFinite(a)? a : '';
     };
 
-    let currentChurch = null; // {id,name,password}
+    let currentChurch, currentChurchName = null; // {id,name,password}
     let isAdmin = false;
 
     function setView(view){
@@ -280,6 +371,7 @@
 
     // ===== Login dropdown =====
     async function loadChurchOptions(){
+  try { el('loginChurch').innerHTML = ''; } catch(e) {}
       try{
         const sel = el('loginChurch');
         sel.innerHTML = '';
@@ -315,10 +407,10 @@
           if(!d.exists){ err.textContent='Church not found.'; return; }
           const ch = { id:d.id, ...d.data() };
           if(pwd !== ch.password){ err.textContent='Incorrect church password.'; return; }
-          isAdmin = false; currentChurch = ch;
+          isAdmin = false; currentChurch = ch; currentChurchName = ch.name; currentChurchName = ch.name;
           el('churchTitle').textContent = `${ch.name} – Directory`;
-          setView('church'); setWhoAmI();
-          await renderMembers();
+          setView('church'); setWhoAmI(); await renderMembers(); initNotifications(); try{ if(el('btnNotifications')) el('btnNotifications').style.display='inline-flex'; }catch(e){} if (typeof renderTransfers === 'function') renderTransfers();
+          renderTransfers();
         }
       }catch(e){
         console.error('handleLogin error', e);
@@ -357,7 +449,8 @@
           ${(m.ministries&&m.ministries.length)? `<span class="pill">🎖 ${m.ministries.join(', ')}</span>`:''}
         </div>
         ${m.notes? `<div class="muted" style="margin-top:6px">${m.notes}</div>`:''}
-      `;
+        ${m.transferredFrom ? `<div class=\"muted small\">🟢 Transferred from: ${m.transferredFrom} | ${(m.transferredDate||'').substring(0,10)}</div>` : ''}
+        `;
       return div;
     }
 
@@ -367,7 +460,7 @@
         const qs = await db.collection(COL_CHURCHES).doc(currentChurch.id)
           .collection(COL_MEMBERS).get();
         const out = [];
-        qs.forEach(doc => out.push({ id:doc.id, ...doc.data() }));
+        qs.forEach(doc => out.push({ ...doc.data(), id: doc.id }));
         return out;
       }catch(e){
         console.error('getMembers error', e);
@@ -568,7 +661,9 @@
       const sort = el('adminSort').value;
 
       let arr = await listAllMembers();
-      arr = arr.filter(m => [m.name, m.family, m.nic, m.churchName]
+      const totalAll = arr.length;
+try { const pill = el('totalMembersPill'); if (pill) pill.textContent = `${totalAll} total`; } catch(e){}
+arr = arr.filter(m => [m.name, m.family, m.nic, m.churchName]
         .map(x => (x || '').toLowerCase()).join(' ').includes(q));
 
       arr.sort((a,b)=>{
@@ -753,6 +848,301 @@
       }catch(e){ console.error('change admin pwd error', e); alert('Update failed'); }
     };
 
+    
+    
+    // ===== Improved Transfer System (Real-time + Visibility) =====
+    let __transfer_working_request = null;
+    let unsubscribeTransfers = null;
+
+    function openTransferRequestModal(){
+      el('req_from_church').innerHTML = '';
+      db.collection(COL_CHURCHES).get().then(snap=>{
+        snap.forEach(doc=>{
+          if(doc.id !== currentChurch.id){
+            const opt = document.createElement('option');
+            opt.value = doc.id;
+            opt.textContent = doc.data().name;
+            el('req_from_church').appendChild(opt);
+          }
+        });
+      });
+      el('requestTransferModal').showModal();
+    }
+
+    async function submitTransferRequest(toChurchId, toChurchName){
+      const fromChurchId = el('req_from_church').value;
+      const memberName = el('req_member_name').value.trim();
+      const memberNic = el('req_member_nic').value.trim();
+      const requestBoard = el('req_board_action').value.trim();
+      const notes = el('req_notes').value.trim();
+      if(!fromChurchId || !memberName || !requestBoard){
+        alert('Please select From Church, member name, and board action no.');
+        return;
+      }
+      try{
+        const fromDoc = await db.collection(COL_CHURCHES).doc(fromChurchId).get();
+        const doc = {
+          memberId: '',
+          memberName,
+          fromChurchId,
+          fromChurchName: fromDoc.exists ? fromDoc.data().name : '',
+          toChurchId,
+          toChurchName: (toChurchName || (currentChurch && currentChurch.name) || ''),
+          requestBoardAction: requestBoard,
+          releaseBoardAction: null,
+          acceptBoardAction: null,
+          status: 'requested',
+          notes: notes || '',
+          createdAt: new Date().toISOString()
+        };
+        await db.collection('transferRequests').add(doc);
+        alert('Transfer request sent.');
+        el('requestTransferModal').close();
+      }catch(e){ console.error('submitTransferRequest error', e); alert('Request failed'); }
+    }
+
+    function renderTransfers(){
+      if(!currentChurch) return;
+      const wrap = el('transferContainer');
+      wrap.innerHTML = '<h3>Transfers</h3>';
+
+      const outgoing = document.createElement('div');
+      outgoing.innerHTML = '<h4>Requests I Sent (Waiting for Release)</h4>';
+      wrap.appendChild(outgoing);
+
+      const awaiting = document.createElement('div');
+      awaiting.innerHTML = '<h4>Requests Awaiting My Acceptance</h4>';
+      wrap.appendChild(awaiting);
+
+      const incoming = document.createElement('div');
+      incoming.innerHTML = '<h4>Requests I Need to Release</h4>';
+      wrap.appendChild(incoming);
+
+      if(unsubscribeTransfers) unsubscribeTransfers();
+
+      unsubscribeTransfers = db.collection('transferRequests').onSnapshot(snap=>{
+          console.log('📡 Transfer listener triggered (' + snap.size + ' requests total)');
+          if(currentChurch) console.log('currentChurch.id =', currentChurch.id);
+          outgoing.innerHTML = '<h4>Requests I Sent (Waiting for Release)</h4>';
+          awaiting.innerHTML = '<h4>Requests Awaiting My Acceptance</h4>';
+          incoming.innerHTML = '<h4>Requests I Need to Release</h4>';
+
+          if(snap.empty){
+            outgoing.innerHTML += '<p>No outgoing requests yet.</p>';
+            incoming.innerHTML += '<p>No incoming requests yet.</p>';
+            awaiting.innerHTML += '<p>No pending acceptances.</p>';
+            return;
+          }
+
+          snap.forEach(doc=>{
+            const r = {id:doc.id,...doc.data()};
+            console.log('→ ['+r.status+']', r.memberName, '| from:', r.fromChurchName, '| to:', r.toChurchName);
+            const div = document.createElement('div');
+            div.className='member';
+            div.innerHTML = '<strong>'+r.memberName+'</strong><br>From: '+r.fromChurchName+' → To: '+r.toChurchName+'<br>Status: '+r.status;
+
+            if(r.toChurchId === currentChurch.id){ console.log('✅ Matched toChurchId for', r.memberName);
+              if(r.status === 'requested') outgoing.appendChild(div);
+              if(r.status === 'released'){
+                const btn=document.createElement('button');
+                btn.textContent='Accept';
+                btn.className='btn ok';
+                btn.onclick=()=>openAcceptModal(r.id);
+                div.appendChild(btn);
+                awaiting.appendChild(div);
+              }
+            }
+            if(r.fromChurchId === currentChurch.id){ console.log('✅ Matched fromChurchId for', r.memberName);
+              if(r.status === 'requested'){
+                const btn=document.createElement('button');
+                btn.textContent='Release';
+                btn.className='btn primary';
+                btn.onclick=()=>openReleaseModal(r.id);
+                div.appendChild(btn);
+                incoming.appendChild(div);
+              }
+            }
+          });
+        });
+    }
+
+    function openReleaseModal(id){ __transfer_working_request=id; el('releaseModal').showModal(); }
+    function openAcceptModal(id){ __transfer_working_request=id; el('acceptModal').showModal(); }
+
+    if(el('btnRequestTransfer')) el('btnRequestTransfer').onclick=()=>openTransferRequestModal();
+    if(el('confirmRequestTransfer')) el('confirmRequestTransfer').onclick=(e)=>{
+      e.preventDefault();
+      submitTransferRequest(currentChurch.id,currentChurchName);
+    };
+
+    const confirmRel = el('confirmRelease'); 
+    if(confirmRel) confirmRel.onclick = async (e)=>{
+      e.preventDefault();
+      const ba = el('release_board_action').value.trim();
+      if(!ba){ alert('Enter release board action'); return; }
+      try{
+        const id = __transfer_working_request;
+        await db.collection('transferRequests').doc(id).set({
+          releaseBoardAction: ba,
+          status:'released',
+          releasedAt: new Date().toISOString()
+        },{merge:true});
+        alert('Released');
+        el('releaseModal').close();
+      }catch(err){console.error('release error',err);alert('Release failed');}
+    };
+
+    const confirmAcc = el('confirmAccept');
+    if(confirmAcc) confirmAcc.onclick = async (e)=>{
+      e.preventDefault();
+      const ba = el('accept_board_action').value.trim();
+      if(!ba){ alert('Enter acceptance board action'); return; }
+      try{
+      const id = __transfer_working_request;
+      const reqDoc = await db.collection('transferRequests').doc(id).get();
+      if(!reqDoc.exists){ alert('Not found'); return; }
+      const r = reqDoc.data();
+
+      // Resolve member data
+      let memberData = null;
+      let sourceMemberId = r.memberId || '';
+
+      async function fetchMemberById(cid, mid){
+        try { const d = await db.collection(COL_CHURCHES).doc(cid).collection(COL_MEMBERS).doc(mid).get();
+          return d.exists ? { id:d.id, ...d.data() } : null; } catch(e){ return null; }
+      }
+      async function fetchBy(cid, field, val){
+        try { const qs = await db.collection(COL_CHURCHES).doc(cid).collection(COL_MEMBERS).where(field,'==',val).get();
+          let out=null; qs.forEach(d=>{ if(!out) out={ id:d.id, ...d.data() }; }); return out; } catch(e){ return null; }
+      }
+
+      if(sourceMemberId){ memberData = await fetchMemberById(r.fromChurchId, sourceMemberId); }
+      if(!memberData && r.requestMemberNic){ memberData = await fetchBy(r.fromChurchId, 'nic', r.requestMemberNic); if(memberData) sourceMemberId = memberData.id; }
+      if(!memberData){ memberData = await fetchBy(r.fromChurchId, 'name', r.memberName); if(memberData) sourceMemberId = memberData.id; }
+
+      if(!memberData){ alert('Could not locate member in the releasing church.'); return; }
+
+      // Add to receiving with transfer note
+      const { id: _oldId, ...memberDataClean } = memberData || {};
+      await db.collection(COL_CHURCHES).doc(r.toChurchId).collection(COL_MEMBERS).add({
+          ...memberDataClean,
+        transferredFrom: (r.fromChurchName || ''),
+        transferredDate: new Date().toISOString()
+      });
+
+      // Delete from releasing if we know the source id
+      if(sourceMemberId){
+        await db.collection(COL_CHURCHES).doc(r.fromChurchId).collection(COL_MEMBERS).doc(sourceMemberId).delete();
+      }
+
+      // Update request
+      await db.collection('transferRequests').doc(id).set({
+        acceptBoardAction: el('accept_board_action').value.trim(),
+        status:'accepted',
+        acceptedAt: new Date().toISOString(),
+        memberId: sourceMemberId || r.memberId || null
+      },{merge:true});
+
+      // 🔔 Create notification for releasing church
+      try{
+        await db.collection(COL_CHURCHES).doc(r.fromChurchId).collection('notifications').add({
+          type: 'transfer',
+          message: `Member ${memberData.name || r.memberName} was transferred to ${r.toChurchName}`,
+          date: new Date().toISOString(),
+          read: false
+        });
+      }catch(e){ console.warn('notification create failed', e); }
+
+      alert('Accepted');
+      el('acceptModal').close();
+      try{ if (typeof renderMembers === 'function') await renderMembers(); }catch(e){}
+      try{ if (typeof renderTransfers === 'function') renderTransfers(); }catch(e){}
+      try{ initNotifications(); }catch(e){}
+    }catch(err){console.error('accept error',err);alert('Accept failed');}
+    };
+
+    // ===== Cancel Button Fixes =====
+    ['requestTransferModal','releaseModal','acceptModal'].forEach(mid=>{
+      const modal = el(mid);
+      if(modal){
+        const cancelBtn = modal.querySelector('button[value="cancel"]');
+        if(cancelBtn) cancelBtn.onclick = ()=> modal.close();
+      }
+    });
+    // ===== End Improved Transfer System =====
+
+
+    
+    // ===== Notifications System =====
+    let __notif_unsub = null;
+
+    function initNotifications(){
+      try {
+        if (__notif_unsub) { __notif_unsub(); __notif_unsub = null; }
+      } catch(e){}
+
+      if (!currentChurch) return;
+
+      const notifRef = db.collection(COL_CHURCHES).doc(currentChurch.id).collection('notifications').orderBy('date','desc');
+      __notif_unsub = notifRef.onSnapshot(snap => {
+        let unread = 0;
+        const list = el('notificationsList');
+        if (list) list.innerHTML = '';
+
+        snap.forEach(doc => {
+          const n = { id: doc.id, ...doc.data() };
+          if (n.read !== true) unread++;
+
+          if (list) {
+            const item = document.createElement('div');
+            item.className = 'card';
+            item.style.padding = '8px 12px';
+            item.innerHTML = `
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div>${n.type === 'transfer' ? '🔁' : '🔔'}</div>
+                <div style="flex:1">
+                  <div>${n.message || ''}</div>
+                  <div class="muted small">${(n.date||'').substring(0,10)} ${n.read ? '(read)' : '(unread)'}</div>
+                </div>
+                ${n.read ? '' : '<button class="btn" data-markread="'+n.id+'">Mark read</button>'}
+              </div>
+            `;
+            list.appendChild(item);
+          }
+        });
+
+        const badge = el('notifCount');
+        if (badge) badge.textContent = unread;
+
+        // Wire 'Mark read' buttons
+        if (list) {
+          list.querySelectorAll('[data-markread]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              const id = btn.getAttribute('data-markread');
+              try {
+                await db.collection(COL_CHURCHES).doc(currentChurch.id).collection('notifications').doc(id)
+                  .set({ read: true }, { merge: true });
+              } catch (e) {
+                console.error('mark read failed', e);
+              }
+            });
+          });
+        }
+      });
+    }
+
+    // Open/close notifications modal
+    (function(){
+      const btn = el('btnNotifications');
+      if (btn) btn.onclick = () => el('notificationsModal').showModal();
+      const dlg = el('notificationsModal');
+      if (dlg) {
+        const cancel = dlg.querySelector('button[value="cancel"]');
+        if (cancel) cancel.onclick = () => dlg.close();
+      }
+    })();
+    // ===== End Notifications System =====
+
     // ===== Exports helpers =====
     function download(filename, text, mime='text/plain'){
       const a = document.createElement('a');
@@ -805,7 +1195,7 @@
 
     // ===== Top bar =====
     el('btnLogin').onclick = ()=> handleLogin();
-    el('btnLogout').onclick = ()=>{ currentChurch=null; isAdmin=false; setView('login'); setWhoAmI(); loadChurchOptions(); };
+    el('btnLogout').onclick = ()=>{ try{ if(__notif_unsub) __notif_unsub(); }catch(e){} __notif_unsub=null; try{ if(el('btnNotifications')) el('btnNotifications').style.display='none'; }catch(e){}  try { if (typeof unsubscribeTransfers === 'function') unsubscribeTransfers(); } catch(e){} unsubscribeTransfers=null; currentChurch=null; isAdmin=false; setView('login'); try{ if(el('btnNotifications')) el('btnNotifications').style.display='none'; }catch(e){} setWhoAmI(); loadChurchOptions(); };
 
     // ===== Tab switching =====
     function showTab(tab){
@@ -829,9 +1219,20 @@
     (async function init(){
       await ensureAdminSeed();
       await loadChurchOptions();
-      setView('login'); setWhoAmI();
+      setView('login'); try{ if(el('btnNotifications')) el('btnNotifications').style.display='none'; }catch(e){} setWhoAmI();
       console.log('App initialized — ready for testing deletes. Remember: delete works when signed in as a Church (not Admin).');
     })();
-  </script>
+  
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    if (typeof loadChurchOptions === 'function') {
+      loadChurchOptions();
+    }
+  } catch (e) {
+    console.error('Failed to load church options on DOMContentLoaded', e);
+  }
+});
+
+</script>
 </body>
 </html>
